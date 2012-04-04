@@ -1425,6 +1425,7 @@
       if (this.context.get(this.nodeData.name)) {
         this.view.setProperty(this.nodeData.name, this.context.get(this.nodeData.name));
       }
+      this.view.render();
       element = this.view.el;
       this.scope.appendChild(element);
     }
@@ -2027,7 +2028,7 @@
       return typeof this.ready === "function" ? this.ready() : void 0;
     };
 
-    _Class.prototype.createChildView = function(viewName) {
+    _Class.prototype.createChildView = function(viewName, options) {
       var className, klass, view,
         _this = this;
       className = Fleck.camelize(Fleck.underscore(viewName), true) + 'View';
@@ -2040,7 +2041,7 @@
         return _this.trigger('descendantCreated', view);
       });
       this.trigger('descendantCreated', view);
-      view.render();
+      if (options != null ? options.render : void 0) view.render();
       return view;
     };
 
