@@ -54,6 +54,7 @@
   if (typeof window !== "undefined" && window !== null) {
     exports.document = window.document;
     exports.window = window;
+    exports.global = window;
     exports.localStorage = localStorage;
   }
 
@@ -189,7 +190,8 @@
 }, "wingman/controller": function(exports, require, module) {(function() {
   var Navigator, Wingman, WingmanObject,
     __hasProp = Object.prototype.hasOwnProperty,
-    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor; child.__super__ = parent.prototype; return child; };
+    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor; child.__super__ = parent.prototype; return child; },
+    __slice = Array.prototype.slice;
 
   WingmanObject = require('./shared/object');
 
@@ -211,8 +213,29 @@
       this.set({
         app: view.app
       });
+      this.setupBindings();
       if (typeof this.ready === "function") this.ready();
     }
+
+    _Class.prototype.setupBindings = function() {
+      var eventName, methodName, _ref, _results;
+      _ref = this.bindings;
+      _results = [];
+      for (eventName in _ref) {
+        methodName = _ref[eventName];
+        _results.push(this.setupBinding(eventName, methodName));
+      }
+      return _results;
+    };
+
+    _Class.prototype.setupBinding = function(eventName, methodName) {
+      var _this = this;
+      return this.get('view').bind(eventName, function() {
+        var args;
+        args = 1 <= arguments.length ? __slice.call(arguments, 0) : [];
+        return _this[methodName].apply(_this, args);
+      });
+    };
 
     return _Class;
 
@@ -321,7 +344,7 @@
       for (_i = 0, _len = _ref.length; _i < _len; _i++) {
         hasManyName = _ref[_i];
         klassName = Fleck.camelize(Fleck.singularize(Fleck.underscore(hasManyName)), true);
-        klass = Wingman.Application.instance.constructor[klassName];
+        klass = Wingman.global[klassName];
         association = new HasManyAssociation(this, klass);
         this.setProperty(hasManyName, association);
         association.bind('add', function(model) {
@@ -2012,8 +2035,17 @@
         });
       }
       this.el = this.domElement = (options != null ? options.el : void 0) || Wingman.document.createElement(this.tag || 'div');
+      this.set({
+        children: []
+      });
       if (options != null ? options.render : void 0) this.render();
     }
+
+    _Class.prototype.name = function() {
+      var withoutView;
+      withoutView = this.constructor.name.replace(/View$/, '');
+      return Fleck.camelize(Fleck.underscore(withoutView));
+    };
 
     _Class.prototype.render = function() {
       var template, templateSource;
@@ -2041,6 +2073,10 @@
         return _this.trigger('descendantCreated', view);
       });
       this.trigger('descendantCreated', view);
+      this.get('children').push(view);
+      view.bind('remove', function() {
+        return _this.get('children').remove(view);
+      });
       if (options != null ? options.render : void 0) view.render();
       return view;
     };
@@ -2137,6 +2173,11 @@
       } else {
         return this.pathKeys().join('.');
       }
+    };
+
+    _Class.prototype.remove = function() {
+      if (this.el.parentNode) Elementary.remove.call(this);
+      return this.trigger('remove');
     };
 
     _Class.prototype.setupStyles = function() {
