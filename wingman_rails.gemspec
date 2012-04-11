@@ -1,6 +1,6 @@
 Gem::Specification.new do |s|
   s.name        = "wingman_rails"
-  s.version     = "0.0.4"
+  s.version     = "0.0.5"
   s.authors     = ["Rasmus Rønn Nielsen"]
   s.email       = ["rasmusrnielsen@gmail.com"]
   s.summary     = "Use Wingman with Rails 3"
