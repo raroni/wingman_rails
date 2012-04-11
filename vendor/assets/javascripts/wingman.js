@@ -99,21 +99,22 @@
 
     Application.include(Events);
 
+    Application.rootViewSiblings = function() {
+      var key, value, views;
+      views = {};
+      for (key in this) {
+        value = this[key];
+        if (key.match("(.+)View$") && key !== 'RootView') views[key] = value;
+      }
+      return views;
+    };
+
     function Application(options) {
       this.handlePopStateChange = __bind(this.handlePopStateChange, this);
-      this.buildController = __bind(this.buildController, this);
-      var key, value, _ref;
-      if (this.constructor.__super__.constructor.instance) {
+      this.buildController = __bind(this.buildController, this);      if (this.constructor.__super__.constructor.instance) {
         throw new Error('You cannot instantiate two Wingman apps at the same time.');
       }
       this.constructor.__super__.constructor.instance = this;
-      _ref = this.constructor;
-      for (key in _ref) {
-        value = _ref[key];
-        if (key.match("(.+)View$") && key !== 'RootView') {
-          this.constructor.RootView[key] = value;
-        }
-      }
       this.bind('viewCreated', this.buildController);
       this.el = (options != null ? options.el : void 0) || Wingman.document.body;
       this.view = (options != null ? options.view : void 0) || this.buildView();
@@ -128,7 +129,8 @@
       view = new this.constructor.RootView({
         parent: this,
         el: this.el,
-        app: this
+        app: this,
+        childClasses: this.constructor.rootViewSiblings()
       });
       view.bind('descendantCreated', function(view) {
         return _this.trigger('viewCreated', view);
@@ -510,14 +512,17 @@
     };
 
     HasManyAssociation.prototype.build = function(arrayOrHash) {
-      var array, hash, _i, _len, _results;
-      array = Array.isArray(arrayOrHash) ? arrayOrHash : [arrayOrHash];
-      _results = [];
-      for (_i = 0, _len = array.length; _i < _len; _i++) {
-        hash = array[_i];
-        _results.push(this.buildOne(hash));
+      var hash, _i, _len, _results;
+      if (Array.isArray(arrayOrHash)) {
+        _results = [];
+        for (_i = 0, _len = arrayOrHash.length; _i < _len; _i++) {
+          hash = arrayOrHash[_i];
+          _results.push(this.buildOne(hash));
+        }
+        return _results;
+      } else {
+        return this.buildOne(arrayOrHash);
       }
-      return _results;
     };
 
     HasManyAssociation.prototype.forEach = function(callback) {
@@ -1444,7 +1449,7 @@
       this.nodeData = nodeData;
       this.scope = scope;
       this.context = context;
-      this.view = this.context.createChildView(this.nodeData.name, this.options());
+      this.view = this.context.createChild(this.nodeData.name, this.options());
       element = this.view.el;
       this.scope.appendChild(element);
     }
@@ -1572,13 +1577,17 @@
     };
 
     Element.prototype.setupClasses = function() {
-      var className, _i, _len, _ref, _results;
+      var className, klass, _i, _len, _ref, _results;
       _ref = this.elementData.classes;
       _results = [];
       for (_i = 0, _len = _ref.length; _i < _len; _i++) {
         className = _ref[_i];
         if (className.isDynamic) this.observeClass(className);
-        _results.push(this.addClass(className.get(this.context)));
+        if (klass = className.get(this.context)) {
+          _results.push(this.addClass(klass));
+        } else {
+          _results.push(void 0);
+        }
       }
       return _results;
     };
@@ -1609,8 +1618,8 @@
     Element.prototype.observeClass = function(className) {
       var _this = this;
       return this.context.observe(className.get(), function(newClassName, oldClassName) {
-        _this.removeClass(oldClassName);
-        return _this.addClass(newClassName);
+        if (oldClassName) _this.removeClass(oldClassName);
+        if (newClassName) return _this.addClass(newClassName);
       });
     };
 
@@ -1692,11 +1701,11 @@
         _this = this;
       this.nodes[value] = [];
       newContext = new WingmanObject;
-      if (this.context.createChildView) {
-        newContext.createChildView = function() {
+      if (this.context.createChild) {
+        newContext.createChild = function() {
           var args, _ref;
           args = 1 <= arguments.length ? __slice.call(arguments, 0) : [];
-          return (_ref = _this.context.createChildView).call.apply(_ref, [_this.context].concat(__slice.call(args)));
+          return (_ref = _this.context.createChild).call.apply(_ref, [_this.context].concat(__slice.call(args)));
         };
       }
       key = Fleck.singularize(this.nodeData.source.split('.').pop());
@@ -2051,6 +2060,11 @@
           app: options.app
         });
       }
+      if ((options != null ? options.childClasses : void 0) != null) {
+        this.set({
+          childClasses: options.childClasses
+        });
+      }
       this.el = this.domElement = (options != null ? options.el : void 0) || Wingman.document.createElement(this.tag || 'div');
       this.set({
         children: []
@@ -2077,28 +2091,32 @@
       return typeof this.ready === "function" ? this.ready() : void 0;
     };
 
-    _Class.prototype.createChildView = function(viewName, options) {
-      var className, klass, view,
+    _Class.prototype.childClasses = function() {
+      return this.constructor;
+    };
+
+    _Class.prototype.createChild = function(name, options) {
+      var child, className, klass,
         _this = this;
-      className = Fleck.camelize(Fleck.underscore(viewName), true) + 'View';
-      klass = this.constructor[className];
-      view = new klass({
+      className = Fleck.camelize(Fleck.underscore(name), true) + 'View';
+      klass = this.get('childClasses')[className];
+      child = new klass({
         parent: this,
         app: this.get('app')
       });
       if (options != null ? options.properties : void 0) {
-        view.set(options.properties);
+        child.set(options.properties);
       }
-      this.get('children').push(view);
-      view.bind('remove', function() {
-        return _this.get('children').remove(view);
+      this.get('children').push(child);
+      child.bind('remove', function() {
+        return _this.get('children').remove(child);
       });
-      view.bind('descendantCreated', function(view) {
-        return _this.trigger('descendantCreated', view);
+      child.bind('descendantCreated', function(child) {
+        return _this.trigger('descendantCreated', child);
       });
-      this.trigger('descendantCreated', view);
-      if (options != null ? options.render : void 0) view.render();
-      return view;
+      this.trigger('descendantCreated', child);
+      if (options != null ? options.render : void 0) child.render();
+      return child;
     };
 
     _Class.prototype.templateSource = function() {
