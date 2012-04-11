@@ -1444,14 +1444,28 @@
       this.nodeData = nodeData;
       this.scope = scope;
       this.context = context;
-      this.view = this.context.createChildView(this.nodeData.name);
-      if (this.context.get(this.nodeData.name)) {
-        this.view.setProperty(this.nodeData.name, this.context.get(this.nodeData.name));
-      }
-      this.view.render();
+      this.view = this.context.createChildView(this.nodeData.name, this.options());
       element = this.view.el;
       this.scope.appendChild(element);
     }
+
+    ChildView.prototype.options = function() {
+      var options, properties;
+      options = {
+        render: true
+      };
+      if (properties = this.properties()) options.properties = properties;
+      return options;
+    };
+
+    ChildView.prototype.properties = function() {
+      var properties;
+      if (this.context.get(this.nodeData.name)) {
+        properties = {};
+        properties[this.nodeData.name] = this.context.get(this.nodeData.name);
+        return properties;
+      }
+    };
 
     ChildView.prototype.remove = function() {
       return this.view.remove();
@@ -1648,7 +1662,8 @@
 }).call(this);
 }, "wingman/template/node_factory/for_block": function(exports, require, module) {(function() {
   var Fleck, ForBlock, NodeFactory, WingmanObject,
-    __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; };
+    __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
+    __slice = Array.prototype.slice;
 
   WingmanObject = require('../../shared/object');
 
@@ -1678,8 +1693,10 @@
       this.nodes[value] = [];
       newContext = new WingmanObject;
       if (this.context.createChildView) {
-        newContext.createChildView = function(name) {
-          return _this.context.createChildView.call(_this.context, name);
+        newContext.createChildView = function() {
+          var args, _ref;
+          args = 1 <= arguments.length ? __slice.call(arguments, 0) : [];
+          return (_ref = _this.context.createChildView).call.apply(_ref, [_this.context].concat(__slice.call(args)));
         };
       }
       key = Fleck.singularize(this.nodeData.source.split('.').pop());
@@ -2069,14 +2086,17 @@
         parent: this,
         app: this.get('app')
       });
-      view.bind('descendantCreated', function(view) {
-        return _this.trigger('descendantCreated', view);
-      });
-      this.trigger('descendantCreated', view);
+      if (options != null ? options.properties : void 0) {
+        view.set(options.properties);
+      }
       this.get('children').push(view);
       view.bind('remove', function() {
         return _this.get('children').remove(view);
       });
+      view.bind('descendantCreated', function(view) {
+        return _this.trigger('descendantCreated', view);
+      });
+      this.trigger('descendantCreated', view);
       if (options != null ? options.render : void 0) view.render();
       return view;
     };
