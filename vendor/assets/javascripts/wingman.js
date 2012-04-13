@@ -208,7 +208,6 @@
     _Class.include(Navigator);
 
     function _Class(view) {
-      _Class.__super__.constructor.call(this);
       this.set({
         view: view
       });
@@ -216,6 +215,7 @@
         app: view.app
       });
       this.setupBindings();
+      _Class.__super__.constructor.call(this);
       if (typeof this.ready === "function") this.ready();
     }
 
@@ -947,7 +947,7 @@
       (_base = this.classCache())[className] || (_base[className] = 0);
       this.classCache()[className]++;
       if (this.classCache()[className] === 1) {
-        return this.domElement.className = this.domElement.className ? this.domElement.className.split(' ').concat(className).join(' ') : className;
+        return this.el.className = this.el.className ? this.el.className.split(' ').concat(className).join(' ') : className;
       }
     },
     removeClass: function(className) {
@@ -955,19 +955,19 @@
       if (this.classCache()[className]) this.classCache()[className]--;
       if (this.classCache()[className] === 0) {
         reg = new RegExp('(\\s|^)' + className + '(\\s|$)');
-        return this.domElement.className = this.domElement.className.replace(reg, '');
+        return this.el.className = this.el.className.replace(reg, '');
       }
     },
     setStyle: function(key, value) {
       var keyCssNotation;
       keyCssNotation = this.convertCssPropertyFromDomToCssNotation(key);
-      return this.domElement.style[keyCssNotation] = value;
+      return this.el.style[keyCssNotation] = value;
     },
     setAttribute: function(key, value) {
-      return this.domElement.setAttribute(key, value);
+      return this.el.setAttribute(key, value);
     },
     remove: function() {
-      return this.domElement.parentNode.removeChild(this.domElement);
+      return this.el.parentNode.removeChild(this.el);
     },
     convertCssPropertyFromDomToCssNotation: function(propertyName) {
       return propertyName.replace(/(-[a-z]{1})/g, function(s) {
@@ -1053,8 +1053,10 @@
     navigate: function(location, options) {
       if (options == null) options = {};
       Wingman.window.history.pushState(options, '', "/" + location);
-      Wingman.Application.instance.updateNavigationOptions(options);
-      return Wingman.Application.instance.updatePath();
+      if (Wingman.Application.instance) {
+        Wingman.Application.instance.updateNavigationOptions(options);
+        return Wingman.Application.instance.updatePath();
+      }
     },
     back: function(times) {
       if (times == null) times = 1;
@@ -1374,7 +1376,7 @@
 
 }).call(this);
 }, "wingman/template": function(exports, require, module) {(function() {
-  var Fleck, NodeFactory, Parser, Template;
+  var Fleck, HandlerFactory, Parser, Template;
 
   module.exports = Template = (function() {
 
@@ -1391,14 +1393,17 @@
     }
 
     Template.prototype.evaluate = function(el, context) {
-      var nodeData, _i, _len, _ref, _results;
-      _ref = this.tree.children;
-      _results = [];
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        nodeData = _ref[_i];
-        _results.push(NodeFactory.create(nodeData, el, context));
+      var key, options, value, _ref;
+      options = {
+        el: el,
+        type: 'element'
+      };
+      _ref = this.tree;
+      for (key in _ref) {
+        value = _ref[key];
+        options[key] = value;
       }
-      return _results;
+      return HandlerFactory.create(options, context);
     };
 
     return Template;
@@ -1407,142 +1412,142 @@
 
   Parser = require('./template/parser');
 
-  NodeFactory = require('./template/node_factory');
+  HandlerFactory = require('./template/handler_factory');
 
   Fleck = require('fleck');
 
 }).call(this);
-}, "wingman/template/node_factory": function(exports, require, module) {(function() {
-  var ChildView, Conditional, Element, ForBlock;
+}, "wingman/template/handler_factory": function(exports, require, module) {(function() {
+  var ChildViewHandler, ConditionalHandler, ElementHandler, ForBlockHandler, MAP, TextHandler;
 
-  exports.create = function(nodeData, scope, context) {
-    this.nodeData = nodeData;
-    this.scope = scope;
-    this.context = context;
-    if (this.nodeData.type === 'for') {
-      return new ForBlock(this.nodeData, this.scope, this.context);
-    } else if (this.nodeData.type === 'childView') {
-      return new ChildView(this.nodeData, this.scope, this.context);
-    } else if (this.nodeData.type === 'conditional') {
-      return new Conditional(this.nodeData, this.scope, this.context);
+  ForBlockHandler = require('./handler_factory/for_block_handler');
+
+  ChildViewHandler = require('./handler_factory/child_view_handler');
+
+  ConditionalHandler = require('./handler_factory/conditional_handler');
+
+  ElementHandler = require('./handler_factory/element_handler');
+
+  TextHandler = require('./handler_factory/text_handler');
+
+  MAP = {
+    "for": ForBlockHandler,
+    childView: ChildViewHandler,
+    conditional: ConditionalHandler,
+    element: ElementHandler,
+    text: TextHandler
+  };
+
+  exports.create = function(options, context) {
+    var klass;
+    klass = MAP[options.type];
+    if (klass) {
+      delete options.type;
+      return new klass(options, context);
     } else {
-      return new Element(this.nodeData, this.scope, this.context);
+      throw new Error("Cannot create unknown node type (" + options.type + ")!");
     }
   };
 
-  ForBlock = require('./node_factory/for_block');
-
-  ChildView = require('./node_factory/child_view');
-
-  Conditional = require('./node_factory/conditional');
-
-  Element = require('./node_factory/element');
-
 }).call(this);
-}, "wingman/template/node_factory/child_view": function(exports, require, module) {(function() {
-  var ChildView;
+}, "wingman/template/handler_factory/child_view_handler": function(exports, require, module) {(function() {
+  var ChildViewHandler;
 
-  module.exports = ChildView = (function() {
+  module.exports = ChildViewHandler = (function() {
 
-    function ChildView(nodeData, scope, context) {
-      var element;
-      this.nodeData = nodeData;
-      this.scope = scope;
+    function ChildViewHandler(options, context) {
+      this.options = options;
       this.context = context;
-      this.view = this.context.createChild(this.nodeData.name, this.options());
-      element = this.view.el;
-      this.scope.appendChild(element);
+      this.view = this.context.createChild(this.options.name, this.viewOptions());
+      this.options.scope.appendChild(this.view.el);
     }
 
-    ChildView.prototype.options = function() {
+    ChildViewHandler.prototype.viewOptions = function() {
       var options, properties;
       options = {
         render: true
       };
-      if (properties = this.properties()) options.properties = properties;
+      if (properties = this.viewProperties()) options.properties = properties;
       return options;
     };
 
-    ChildView.prototype.properties = function() {
+    ChildViewHandler.prototype.viewProperties = function() {
       var properties;
-      if (this.context.get(this.nodeData.name)) {
+      if (this.context.get(this.options.name)) {
         properties = {};
-        properties[this.nodeData.name] = this.context.get(this.nodeData.name);
+        properties[this.options.name] = this.context.get(this.options.name);
         return properties;
       }
     };
 
-    ChildView.prototype.remove = function() {
+    ChildViewHandler.prototype.remove = function() {
       return this.view.remove();
     };
 
-    return ChildView;
+    return ChildViewHandler;
 
   })();
 
 }).call(this);
-}, "wingman/template/node_factory/conditional": function(exports, require, module) {(function() {
-  var Conditional, NodeFactory,
+}, "wingman/template/handler_factory/conditional_handler": function(exports, require, module) {(function() {
+  var ConditionalHandler, HandlerFactory,
     __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; };
 
-  NodeFactory = require('../node_factory');
+  HandlerFactory = require('../handler_factory');
 
-  module.exports = Conditional = (function() {
+  module.exports = ConditionalHandler = (function() {
 
-    function Conditional(nodeData, scope, context) {
-      this.nodeData = nodeData;
-      this.scope = scope;
+    function ConditionalHandler(options, context) {
+      this.options = options;
       this.context = context;
       this.update = __bind(this.update, this);
-      this.nodes = [];
-      this.context.observe(this.nodeData.source, this.update);
-      this.update(this.context.get(this.nodeData.source));
+      this.handlers = [];
+      this.context.observe(this.options.source, this.update);
+      this.update(this.context.get(this.options.source));
     }
 
-    Conditional.prototype.add = function(currentValue) {
-      var newNodeData, node, _i, _j, _len, _len2, _ref, _ref2, _results, _results2;
-      if (currentValue) {
-        _ref = this.nodeData.trueChildren;
+    ConditionalHandler.prototype.add = function(currentValue) {
+      var child, children, handler, key, options, value, _i, _len, _results;
+      children = (currentValue && this.options.trueChildren) || this.options.falseChildren;
+      if (children) {
         _results = [];
-        for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-          newNodeData = _ref[_i];
-          node = NodeFactory.create(newNodeData, this.scope, this.context);
-          _results.push(this.nodes.push(node));
+        for (_i = 0, _len = children.length; _i < _len; _i++) {
+          child = children[_i];
+          options = {
+            scope: this.options.scope
+          };
+          for (key in child) {
+            value = child[key];
+            options[key] = value;
+          }
+          handler = HandlerFactory.create(options, this.context);
+          _results.push(this.handlers.push(handler));
         }
         return _results;
-      } else if (this.nodeData.falseChildren) {
-        _ref2 = this.nodeData.falseChildren;
-        _results2 = [];
-        for (_j = 0, _len2 = _ref2.length; _j < _len2; _j++) {
-          newNodeData = _ref2[_j];
-          node = NodeFactory.create(newNodeData, this.scope, this.context);
-          _results2.push(this.nodes.push(node));
-        }
-        return _results2;
       }
     };
 
-    Conditional.prototype.remove = function() {
-      var node, _results;
+    ConditionalHandler.prototype.remove = function() {
+      var handler, _results;
       _results = [];
-      while (node = this.nodes.shift()) {
-        _results.push(node.remove());
+      while (handler = this.handlers.shift()) {
+        _results.push(handler.remove());
       }
       return _results;
     };
 
-    Conditional.prototype.update = function(currentValue) {
+    ConditionalHandler.prototype.update = function(currentValue) {
       this.remove();
       return this.add(currentValue);
     };
 
-    return Conditional;
+    return ConditionalHandler;
 
   })();
 
 }).call(this);
-}, "wingman/template/node_factory/element": function(exports, require, module) {(function() {
-  var Element, Elementary, Module, NodeFactory, Wingman,
+}, "wingman/template/handler_factory/element_handler": function(exports, require, module) {(function() {
+  var ElementHandler, Elementary, HandlerFactory, Module, Wingman,
     __hasProp = Object.prototype.hasOwnProperty,
     __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor; child.__super__ = parent.prototype; return child; };
 
@@ -1550,127 +1555,142 @@
 
   Elementary = require('../../shared/elementary');
 
-  module.exports = Element = (function(_super) {
+  module.exports = ElementHandler = (function(_super) {
 
-    __extends(Element, _super);
+    __extends(ElementHandler, _super);
 
-    Element.include(Elementary);
+    ElementHandler.include(Elementary);
 
-    function Element(elementData, scope, context) {
-      this.elementData = elementData;
-      this.scope = scope;
+    function ElementHandler(options, context) {
+      this.options = options;
       this.context = context;
-      this.domElement = Wingman.document.createElement(this.elementData.tag);
-      this.addToScope();
-      if (this.elementData.styles) this.setupStyles();
-      if (this.elementData.classes) this.setupClasses();
-      if (this.elementData.attributes) this.setupAttributes();
-      if (this.elementData.value) {
-        this.setupInnerHTML();
-      } else if (this.elementData.children) {
+      this.setupDomElement();
+      if (this.options.styles) this.setupStyles();
+      if (this.options.classes) this.setupClasses();
+      if (this.options.attributes) this.setupAttributes();
+      if (this.options.source) {
+        this.setupSource();
+      } else if (this.options.children) {
         this.setupChildren();
       }
     }
 
-    Element.prototype.addToScope = function() {
-      return this.scope.appendChild(this.domElement);
+    ElementHandler.prototype.setupDomElement = function() {
+      var element;
+      return this.el = this.options.el ? this.options.el : (element = Wingman.document.createElement(this.options.tag), this.options.scope.appendChild(element), element);
     };
 
-    Element.prototype.setupClasses = function() {
-      var className, klass, _i, _len, _ref, _results;
-      _ref = this.elementData.classes;
+    ElementHandler.prototype.setupClasses = function() {
+      var klass, klassValue, _i, _len, _ref, _results;
+      _ref = this.options.classes;
       _results = [];
       for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        className = _ref[_i];
-        if (className.isDynamic) this.observeClass(className);
-        if (klass = className.get(this.context)) {
-          _results.push(this.addClass(klass));
+        klass = _ref[_i];
+        if (klass.isDynamic) {
+          this.observeClass(klass);
+          if (klassValue = this.context.get(klass.value)) {
+            _results.push(this.addClass(klassValue));
+          } else {
+            _results.push(void 0);
+          }
         } else {
-          _results.push(void 0);
+          _results.push(this.addClass(klass.value));
         }
       }
       return _results;
     };
 
-    Element.prototype.setupAttributes = function() {
-      var key, value, _ref, _results;
-      _ref = this.elementData.attributes;
+    ElementHandler.prototype.setupAttributes = function() {
+      var attribute, key, _ref, _results;
+      _ref = this.options.attributes;
       _results = [];
       for (key in _ref) {
-        value = _ref[key];
-        this.setAttribute(key, value.get(this.context));
-        if (value.isDynamic) {
-          _results.push(this.observeAttribute(key, value));
+        attribute = _ref[key];
+        if (attribute.isDynamic) {
+          this.observeAttribute(key, attribute);
+          _results.push(this.setAttribute(key, this.context.get(attribute.value)));
         } else {
-          _results.push(void 0);
+          _results.push(this.setAttribute(key, attribute.value));
         }
       }
       return _results;
     };
 
-    Element.prototype.observeAttribute = function(key, value) {
+    ElementHandler.prototype.observeAttribute = function(key, attribute) {
       var _this = this;
-      return this.context.observe(value.get(), function(newValue) {
+      return this.context.observe(attribute.value, function(newValue) {
         return _this.setAttribute(key, newValue);
       });
     };
 
-    Element.prototype.observeClass = function(className) {
+    ElementHandler.prototype.observeClass = function(klass) {
       var _this = this;
-      return this.context.observe(className.get(), function(newClassName, oldClassName) {
+      return this.context.observe(klass.value, function(newClassName, oldClassName) {
         if (oldClassName) _this.removeClass(oldClassName);
         if (newClassName) return _this.addClass(newClassName);
       });
     };
 
-    Element.prototype.setupStyles = function() {
-      var key, value, _ref, _results;
-      _ref = this.elementData.styles;
+    ElementHandler.prototype.setupStyles = function() {
+      var key, style, _ref, _results;
+      _ref = this.options.styles;
       _results = [];
       for (key in _ref) {
-        value = _ref[key];
-        if (value.isDynamic) this.observeStyle(key, value);
-        _results.push(this.setStyle(key, value.get(this.context)));
+        style = _ref[key];
+        if (style.isDynamic) {
+          this.observeStyle(key, style);
+          _results.push(this.setStyle(key, this.context.get(style.value)));
+        } else {
+          _results.push(this.setStyle(key, style.value));
+        }
       }
       return _results;
     };
 
-    Element.prototype.observeStyle = function(key, value) {
+    ElementHandler.prototype.observeStyle = function(key, style) {
       var _this = this;
-      return this.context.observe(value.get(), function(newValue) {
+      return this.context.observe(style.value, function(newValue) {
         return _this.setStyle(key, newValue);
       });
     };
 
-    Element.prototype.setupInnerHTML = function() {
+    ElementHandler.prototype.setupSource = function() {
       var _this = this;
-      return this.domElement.innerHTML = this.elementData.value.isDynamic ? (this.context.observe(this.elementData.value.get(), function(newValue) {
-        return _this.domElement.innerHTML = newValue;
-      }), this.context.get(this.elementData.value.get())) : this.elementData.value.get();
+      this.el.innerHTML = this.context.get(this.options.source);
+      return this.context.observe(this.options.source, function(newValue) {
+        return _this.el.innerHTML = newValue;
+      });
     };
 
-    Element.prototype.setupChildren = function() {
-      var child, _i, _len, _ref, _results;
-      _ref = this.elementData.children;
+    ElementHandler.prototype.setupChildren = function() {
+      var child, key, options, value, _i, _len, _ref, _results;
+      _ref = this.options.children;
       _results = [];
       for (_i = 0, _len = _ref.length; _i < _len; _i++) {
         child = _ref[_i];
-        _results.push(NodeFactory.create(child, this.domElement, this.context));
+        options = {
+          scope: this.el
+        };
+        for (key in child) {
+          value = child[key];
+          options[key] = value;
+        }
+        _results.push(HandlerFactory.create(options, this.context));
       }
       return _results;
     };
 
-    return Element;
+    return ElementHandler;
 
   })(Module);
 
   Wingman = require('../../../wingman');
 
-  NodeFactory = require('../node_factory');
+  HandlerFactory = require('../handler_factory');
 
 }).call(this);
-}, "wingman/template/node_factory/for_block": function(exports, require, module) {(function() {
-  var Fleck, ForBlock, NodeFactory, WingmanObject,
+}, "wingman/template/handler_factory/for_block_handler": function(exports, require, module) {(function() {
+  var Fleck, ForBlockHandler, HandlerFactory, WingmanObject,
     __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
     __slice = Array.prototype.slice;
 
@@ -1678,28 +1698,27 @@
 
   Fleck = require('fleck');
 
-  NodeFactory = require('../node_factory');
+  HandlerFactory = require('../handler_factory');
 
-  module.exports = ForBlock = (function() {
+  module.exports = ForBlockHandler = (function() {
 
-    function ForBlock(nodeData, scope, context) {
-      this.nodeData = nodeData;
-      this.scope = scope;
+    function ForBlockHandler(options, context) {
+      this.options = options;
       this.context = context;
       this.rebuild = __bind(this.rebuild, this);
       this.remove = __bind(this.remove, this);
       this.add = __bind(this.add, this);
-      this.nodes = {};
+      this.handlers = {};
       if (this.source()) this.addAll();
-      this.context.observe(this.nodeData.source, this.rebuild);
-      this.context.observe(this.nodeData.source, 'add', this.add);
-      this.context.observe(this.nodeData.source, 'remove', this.remove);
+      this.context.observe(this.options.source, this.rebuild);
+      this.context.observe(this.options.source, 'add', this.add);
+      this.context.observe(this.options.source, 'remove', this.remove);
     }
 
-    ForBlock.prototype.add = function(value) {
-      var hash, key, newContext, newNodeData, node, _i, _len, _ref, _results,
+    ForBlockHandler.prototype.add = function(value) {
+      var child, hash, key, newContext, _i, _len, _ref, _results,
         _this = this;
-      this.nodes[value] = [];
+      this.handlers[value] = [];
       newContext = new WingmanObject;
       if (this.context.createChild) {
         newContext.createChild = function() {
@@ -1708,43 +1727,54 @@
           return (_ref = _this.context.createChild).call.apply(_ref, [_this.context].concat(__slice.call(args)));
         };
       }
-      key = Fleck.singularize(this.nodeData.source.split('.').pop());
+      key = Fleck.singularize(this.options.source.split('.').pop());
       hash = {};
       hash[key] = value;
       newContext.set(hash);
-      _ref = this.nodeData.children;
+      _ref = this.options.children;
       _results = [];
       for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        newNodeData = _ref[_i];
-        node = NodeFactory.create(newNodeData, this.scope, newContext);
-        _results.push(this.nodes[value].push(node));
+        child = _ref[_i];
+        _results.push(this.handlers[value].push(this.createHandler(child, newContext)));
       }
       return _results;
     };
 
-    ForBlock.prototype.remove = function(value) {
-      var node;
-      while (this.nodes[value].length) {
-        node = this.nodes[value].pop();
-        node.remove();
+    ForBlockHandler.prototype.createHandler = function(child, context) {
+      var key, options, value;
+      options = {
+        scope: this.options.scope
+      };
+      for (key in child) {
+        value = child[key];
+        options[key] = value;
       }
-      return delete this.nodes[value];
+      return HandlerFactory.create(options, context);
     };
 
-    ForBlock.prototype.source = function() {
-      return this.context.get(this.nodeData.source);
+    ForBlockHandler.prototype.remove = function(value) {
+      var handler;
+      while (this.handlers[value].length) {
+        handler = this.handlers[value].pop();
+        handler.remove();
+      }
+      return delete this.handlers[value];
     };
 
-    ForBlock.prototype.addAll = function() {
+    ForBlockHandler.prototype.source = function() {
+      return this.context.get(this.options.source);
+    };
+
+    ForBlockHandler.prototype.addAll = function() {
       var _this = this;
       return this.source().forEach(function(value) {
         return _this.add(value);
       });
     };
 
-    ForBlock.prototype.removeAll = function() {
+    ForBlockHandler.prototype.removeAll = function() {
       var element, value, _ref, _results;
-      _ref = this.nodes;
+      _ref = this.handlers;
       _results = [];
       for (value in _ref) {
         element = _ref[value];
@@ -1753,24 +1783,57 @@
       return _results;
     };
 
-    ForBlock.prototype.rebuild = function() {
+    ForBlockHandler.prototype.rebuild = function() {
       this.removeAll();
       if (this.source()) return this.addAll();
     };
 
-    return ForBlock;
+    return ForBlockHandler;
+
+  })();
+
+}).call(this);
+}, "wingman/template/handler_factory/text_handler": function(exports, require, module) {(function() {
+  var TextHandler, Wingman;
+
+  Wingman = require('../../../wingman');
+
+  module.exports = TextHandler = (function() {
+
+    function TextHandler(options, context) {
+      this.options = options;
+      this.context = context;
+      this.textNode = Wingman.document.createTextNode(this.options.value);
+      this.options.scope.appendChild(this.textNode);
+    }
+
+    TextHandler.prototype.remove = function() {
+      return this.textNode.parentNode.removeChild(this.textNode);
+    };
+
+    return TextHandler;
 
   })();
 
 }).call(this);
 }, "wingman/template/parser": function(exports, require, module) {(function() {
-  var StringScanner, Value, selfClosingTags;
+  var StringScanner, buildText, selfClosingTags;
 
   StringScanner = require("strscan").StringScanner;
 
-  Value = require("./parser/value");
-
   selfClosingTags = ['input', 'img', 'br', 'hr'];
+
+  buildText = function(value) {
+    var isDynamic, newNode;
+    if (isDynamic = value.match(/^\{(.*?)\}$/)) {
+      value = value.substring(1, value.length - 1);
+    }
+    return newNode = {
+      type: 'text',
+      value: value,
+      isDynamic: isDynamic
+    };
+  };
 
   module.exports = (function() {
 
@@ -1814,7 +1877,7 @@
     };
 
     _Class.prototype.scan = function() {
-      return this.scanForEndTag() || this.scanForStartTag() || this.scanForIfToken() || this.scanForElseToken() || this.scanForViewToken() || this.scanForForToken() || this.scanForEndToken() || this.scanForText();
+      return this.scanForEndTag() || this.scanForStartTag() || this.scanForIfToken() || this.scanForElseToken() || this.scanForViewToken() || this.scanForForToken() || this.scanForEndToken() || this.scanForSource() || this.scanForText();
     };
 
     _Class.prototype.scanForEndTag = function() {
@@ -1914,11 +1977,36 @@
       return result;
     };
 
+    _Class.prototype.scanForSource = function() {
+      var result, value;
+      result = this.scanner.scan(/\{[a-zA-Z\.]+\}\<\//);
+      if (result) {
+        value = result.substr(1, result.length - 4);
+        this.currentScope.source = value;
+        this.scanner.head -= 2;
+      } else {
+        result = this.scanner.scan(/\{[a-zA-Z\.]+\}$/);
+        if (result) {
+          value = result.substr(1, result.length - 2);
+          this.currentScope.source = value;
+        }
+      }
+      return result;
+    };
+
     _Class.prototype.scanForText = function() {
-      var result;
+      var newNode, result, value;
       result = this.scanner.scanUntil(/</);
-      this.currentScope.value = new Value(result.substr(0, result.length - 1));
-      this.scanner.head -= 1;
+      if (result) {
+        value = result.substr(0, result.length - 1);
+        newNode = buildText(value);
+        this.currentScope.children.push(newNode);
+        this.scanner.head -= 1;
+      } else {
+        value = this.scanner.scanUntil(/$/);
+        newNode = buildText(value);
+        this.currentScope.children.push(newNode);
+      }
       return result;
     };
 
@@ -1939,7 +2027,7 @@
       for (_i = 0, _len = _ref.length; _i < _len; _i++) {
         styleAsString = _ref[_i];
         split = styleAsString.split(':');
-        styles[split[0]] = new Value(split[1]);
+        styles[split[0]] = buildText(split[1]);
       }
       return styles;
     };
@@ -1950,7 +2038,7 @@
       _ref = classesAsString.split(' ');
       for (_i = 0, _len = _ref.length; _i < _len; _i++) {
         klass = _ref[_i];
-        classes.push(new Value(klass));
+        classes.push(buildText(klass));
       }
       return classes;
     };
@@ -1970,34 +2058,9 @@
         _results = [];
         for (key in attributes) {
           value = attributes[key];
-          _results.push(node.attributes[key] = new Value(value));
+          _results.push(node.attributes[key] = buildText(value));
         }
         return _results;
-      }
-    };
-
-    return _Class;
-
-  })();
-
-}).call(this);
-}, "wingman/template/parser/value": function(exports, require, module) {(function() {
-
-  module.exports = (function() {
-
-    function _Class(body) {
-      var match;
-      this.body = body;
-      match = this.body.match(/^\{(.*?)\}$/);
-      this.isDynamic = !!match;
-      if (this.isDynamic) this.body = match[1];
-    }
-
-    _Class.prototype.get = function(context) {
-      if (this.isDynamic && context) {
-        return context.get(this.body);
-      } else {
-        return this.body;
       }
     };
 
@@ -2049,7 +2112,6 @@
     };
 
     function _Class(options) {
-      _Class.__super__.constructor.call(this);
       if ((options != null ? options.parent : void 0) != null) {
         this.set({
           parent: options.parent
@@ -2065,10 +2127,11 @@
           childClasses: options.childClasses
         });
       }
-      this.el = this.domElement = (options != null ? options.el : void 0) || Wingman.document.createElement(this.tag || 'div');
+      this.el = (options != null ? options.el : void 0) || Wingman.document.createElement(this.tag || 'div');
       this.set({
         children: []
       });
+      _Class.__super__.constructor.call(this);
       if (options != null ? options.render : void 0) this.render();
     }
 
