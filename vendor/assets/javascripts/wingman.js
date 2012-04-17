@@ -2083,7 +2083,7 @@
 
   Fleck = require('fleck');
 
-  STYLE_NAMES = ['backgroundImage', 'backgroundColor', 'backgroundPosition', 'left', 'right', 'top', 'bottom'];
+  STYLE_NAMES = ['backgroundImage', 'backgroundColor', 'backgroundPosition', 'left', 'right', 'top', 'bottom', 'width', 'height'];
 
   module.exports = (function(_super) {
 
