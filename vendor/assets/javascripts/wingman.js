@@ -984,14 +984,14 @@
     bind: function(eventName, callback) {
       var _base;
       if (!callback) throw new Error('Callback must be set!');
-      this._callbacks || (this._callbacks = {});
+      if (!this.hasOwnProperty('_callbacks')) this._callbacks = {};
       (_base = this._callbacks)[eventName] || (_base[eventName] = []);
       this._callbacks[eventName].push(callback);
       return this._callbacks;
     },
     unbind: function(eventName, callback) {
       var index, list;
-      list = this._callbacks && this._callbacks[eventName];
+      list = this.hasOwnProperty('_callbacks') && this._callbacks[eventName];
       if (!list) return false;
       index = list.indexOf(callback);
       return list.splice(index, 1);
@@ -1000,7 +1000,7 @@
       var args, callback, eventName, list, _i, _len, _ref, _results;
       args = 1 <= arguments.length ? __slice.call(arguments, 0) : [];
       eventName = args.shift();
-      list = this._callbacks && this._callbacks[eventName];
+      list = this.hasOwnProperty('_callbacks') && this._callbacks[eventName];
       if (!list) return;
       _ref = list.slice();
       _results = [];
@@ -1451,14 +1451,16 @@
 
 }).call(this);
 }, "wingman/template/handler_factory/child_view_handler": function(exports, require, module) {(function() {
-  var ChildViewHandler;
+  var ChildViewHandler, Wingman;
+
+  Wingman = require('../../../wingman');
 
   module.exports = ChildViewHandler = (function() {
 
     function ChildViewHandler(options, context) {
       this.options = options;
       this.context = context;
-      this.view = this.context.createChild(this.options.name, this.viewOptions());
+      this.view = this.context.createChild(this.viewName(), this.viewOptions());
       this.options.scope.appendChild(this.view.el);
     }
 
@@ -1472,16 +1474,31 @@
     };
 
     ChildViewHandler.prototype.viewProperties = function() {
-      var properties;
-      if (this.context.get(this.options.name)) {
-        properties = {};
+      var key, properties, _i, _len, _ref;
+      properties = {};
+      if (this.options.name && this.context.get(this.options.name)) {
         properties[this.options.name] = this.context.get(this.options.name);
-        return properties;
       }
+      if (this.options.properties) {
+        _ref = this.options.properties;
+        for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+          key = _ref[_i];
+          properties[key] = this.context.get(key);
+        }
+      }
+      return properties;
     };
 
     ChildViewHandler.prototype.remove = function() {
       return this.view.remove();
+    };
+
+    ChildViewHandler.prototype.viewName = function() {
+      if (this.options.name) {
+        return this.options.name;
+      } else {
+        return this.context.get(this.options.path);
+      }
     };
 
     return ChildViewHandler;
@@ -1657,7 +1674,7 @@
     ElementHandler.prototype.setupSource = function() {
       var _this = this;
       this.el.innerHTML = this.context.get(this.options.source);
-      return this.context.observe(this.options.source, function(newValue) {
+      return this.context.observe(this.options.source, function(newValue, oldValue) {
         return _this.el.innerHTML = newValue;
       });
     };
@@ -1691,8 +1708,7 @@
 }).call(this);
 }, "wingman/template/handler_factory/for_block_handler": function(exports, require, module) {(function() {
   var Fleck, ForBlockHandler, HandlerFactory, WingmanObject,
-    __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
-    __slice = Array.prototype.slice;
+    __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; };
 
   WingmanObject = require('../../shared/object');
 
@@ -1716,17 +1732,9 @@
     }
 
     ForBlockHandler.prototype.add = function(value) {
-      var child, hash, key, newContext, _i, _len, _ref, _results,
-        _this = this;
+      var child, hash, key, newContext, _i, _len, _ref, _results;
       this.handlers[value] = [];
-      newContext = new WingmanObject;
-      if (this.context.createChild) {
-        newContext.createChild = function() {
-          var args, _ref;
-          args = 1 <= arguments.length ? __slice.call(arguments, 0) : [];
-          return (_ref = _this.context.createChild).call.apply(_ref, [_this.context].concat(__slice.call(args)));
-        };
-      }
+      newContext = Object.create(this.context);
       key = Fleck.singularize(this.options.source.split('.').pop());
       hash = {};
       hash[key] = value;
@@ -1926,14 +1934,28 @@
     };
 
     _Class.prototype.scanForViewToken = function() {
-      var newNode, result;
-      result = this.scanner.scan(/\{view (.*?)\}/);
+      var identifier, newNode, option, optionRegex, options, result;
+      result = this.scanner.scan(/\{view ([a-zA-Z\.']+)(,{1} {1}(.*?))?\}/);
       if (result) {
+        identifier = this.scanner.getCapture(0);
+        options = this.scanner.getCapture(2);
         newNode = {
-          name: this.scanner.getCapture(0),
           parent: this.currentScope,
           type: 'childView'
         };
+        if (options) {
+          optionRegex = /(\w+): \[(.*?)\]/g;
+          while (option = optionRegex.exec(options)) {
+            if (option[1] === 'properties') {
+              newNode.properties = option[2].replace(/\'| /g, '').split(',');
+            }
+          }
+        }
+        if (identifier[0] === "'") {
+          newNode.name = identifier.replace(/\'/g, '');
+        } else {
+          newNode.path = identifier;
+        }
         this.currentScope.children.push(newNode);
       }
       return result;
