@@ -64,6 +64,8 @@
 
   exports.View = require('./wingman/view');
 
+  exports.Store = require('./wingman/store');
+
   exports.Model = require('./wingman/model');
 
   exports.Controller = require('./wingman/controller');
@@ -73,6 +75,10 @@
   exports.Module = require('./wingman/shared/module');
 
   exports.Events = require('./wingman/shared/events');
+
+  exports.store = function() {
+    return this._store || (this._store = new exports.Store);
+  };
 
 }).call(this);
 }, "wingman/application": function(exports, require, module) {(function() {
@@ -245,7 +251,7 @@
 
 }).call(this);
 }, "wingman/model": function(exports, require, module) {(function() {
-  var Fleck, HasManyAssociation, Model, Scope, StorageAdapter, Store, Wingman, WingmanObject,
+  var Fleck, HasManyAssociation, Model, StorageAdapter, Wingman, WingmanObject,
     __hasProp = Object.prototype.hasOwnProperty,
     __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor; child.__super__ = parent.prototype; return child; },
     __slice = Array.prototype.slice;
@@ -255,10 +261,6 @@
   WingmanObject = require('./shared/object');
 
   StorageAdapter = require('./model/storage_adapter');
-
-  Store = require('./model/store');
-
-  Scope = require('./model/scope');
 
   HasManyAssociation = require('./model/has_many_association');
 
@@ -270,12 +272,12 @@
 
     Model.extend(StorageAdapter);
 
-    Model.store = function() {
-      return this._store || (this._store = new Store);
+    Model.collection = function() {
+      return Wingman.store().collection(this);
     };
 
     Model.count = function() {
-      return this.store().count();
+      return this.collection().count();
     };
 
     Model.load = function() {
@@ -320,11 +322,11 @@
     };
 
     Model.scoped = function(params) {
-      return new Scope(this.store(), params);
+      return this.collection().scoped(params);
     };
 
     Model.find = function(id) {
-      return this.store().find(id);
+      return this.collection().find(id);
     };
 
     function Model(properties, options) {
@@ -333,7 +335,7 @@
       this.dirtyStaticPropertyNames = [];
       if (this.constructor.hasManyNames) this.setupHasManyAssociations();
       this.observeOnce('id', function() {
-        return _this.constructor.store().add(_this);
+        return _this.constructor.collection().add(_this);
       });
       this.set(properties);
     }
@@ -556,119 +558,6 @@
   })(Module);
 
 }).call(this);
-}, "wingman/model/scope": function(exports, require, module) {(function() {
-  var Events, Module, Scope,
-    __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
-    __hasProp = Object.prototype.hasOwnProperty,
-    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor; child.__super__ = parent.prototype; return child; };
-
-  Module = require('./../shared/module');
-
-  Events = require('./../shared/events');
-
-  module.exports = Scope = (function(_super) {
-
-    __extends(Scope, _super);
-
-    Scope.include(Events);
-
-    function Scope(store, params) {
-      var _this = this;
-      this.params = params;
-      this.remove = __bind(this.remove, this);
-      this.check = __bind(this.check, this);
-      this.listen = __bind(this.listen, this);
-      this.models = {};
-      store.forEach(function(model) {
-        return _this.check(model);
-      });
-      store.bind('add', this.listen);
-    }
-
-    Scope.prototype.listen = function(model) {
-      var key, _i, _len, _ref, _results,
-        _this = this;
-      this.check(model);
-      _ref = Object.keys(this.params);
-      _results = [];
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        key = _ref[_i];
-        _results.push(model.observe(key, function() {
-          return _this.check(model);
-        }));
-      }
-      return _results;
-    };
-
-    Scope.prototype.check = function(model) {
-      if (this.shouldBeAdded(model)) {
-        return this.add(model);
-      } else if (this.shouldBeRemoved(model)) {
-        return this.remove(model);
-      }
-    };
-
-    Scope.prototype.shouldBeAdded = function(model) {
-      return this.matches(model) && !this.exists(model);
-    };
-
-    Scope.prototype.shouldBeRemoved = function(model) {
-      return !this.matches(model) && this.exists(model);
-    };
-
-    Scope.prototype.add = function(model) {
-      if (!model.get('id')) throw new Error('Model must have ID to be stored.');
-      if (this.exists(model)) {
-        throw new Error("" + model.constructor.name + " model with ID " + (model.get('id')) + " already in scope.");
-      }
-      this.models[model.get('id')] = model;
-      this.trigger('add', model);
-      return model.bind('destroy', this.remove);
-    };
-
-    Scope.prototype.matches = function(model) {
-      var _this = this;
-      return Object.keys(this.params).every(function(key) {
-        return model.get(key) === _this.params[key];
-      });
-    };
-
-    Scope.prototype.count = function() {
-      return Object.keys(this.models).length;
-    };
-
-    Scope.prototype.find = function(id) {
-      return this.models[id] || (function() {
-        throw new Error('Model not found in scope.');
-      })();
-    };
-
-    Scope.prototype.remove = function(model) {
-      delete this.models[model.get('id')];
-      model.unbind('destroy', this.remove);
-      return this.trigger('remove', model);
-    };
-
-    Scope.prototype.exists = function(model) {
-      return !!this.models[model.get('id')];
-    };
-
-    Scope.prototype.forEach = function(callback) {
-      var key, value, _ref, _results;
-      _ref = this.models;
-      _results = [];
-      for (key in _ref) {
-        value = _ref[key];
-        _results.push(callback(value));
-      }
-      return _results;
-    };
-
-    return Scope;
-
-  })(Module);
-
-}).call(this);
 }, "wingman/model/storage_adapter": function(exports, require, module) {(function() {
   var LocalStorage, RestStorage;
 
@@ -764,6 +653,10 @@
       return Math.round(Math.random() * 5000000);
     };
 
+    _Class.prototype["delete"] = function(id) {
+      return Wingman.localStorage.removeItem(this.key(id));
+    };
+
     return _Class;
 
   })();
@@ -827,90 +720,6 @@
     return _Class;
 
   })();
-
-}).call(this);
-}, "wingman/model/store": function(exports, require, module) {(function() {
-  var Events, Module, Store,
-    __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
-    __hasProp = Object.prototype.hasOwnProperty,
-    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor; child.__super__ = parent.prototype; return child; };
-
-  Module = require('./../shared/module');
-
-  Events = require('./../shared/events');
-
-  module.exports = Store = (function(_super) {
-
-    __extends(Store, _super);
-
-    Store.include(Events);
-
-    function Store() {
-      this.remove = __bind(this.remove, this);      this.models = {};
-    }
-
-    Store.prototype.add = function(model) {
-      if (!model.get('id')) throw new Error('Model must have ID to be stored.');
-      if (this.exists(model)) {
-        return this.update(this.models[model.get('id')], model);
-      } else {
-        return this.insert(model);
-      }
-    };
-
-    Store.prototype.insert = function(model) {
-      this.models[model.get('id')] = model;
-      this.trigger('add', model);
-      return model.bind('destroy', this.remove);
-    };
-
-    Store.prototype.update = function(model, model2) {
-      var key, value, _ref, _results;
-      _ref = model2.toJSON();
-      _results = [];
-      for (key in _ref) {
-        value = _ref[key];
-        if (key !== 'id') {
-          _results.push(model.setProperty(key, value));
-        } else {
-          _results.push(void 0);
-        }
-      }
-      return _results;
-    };
-
-    Store.prototype.find = function(id) {
-      return this.models[id];
-    };
-
-    Store.prototype.count = function() {
-      return Object.keys(this.models).length;
-    };
-
-    Store.prototype.remove = function(model) {
-      delete this.models[model.get('id')];
-      model.unbind(this.remove);
-      return this.trigger('remove', model);
-    };
-
-    Store.prototype.exists = function(model) {
-      return !!this.models[model.get('id')];
-    };
-
-    Store.prototype.forEach = function(callback) {
-      var key, value, _ref, _results;
-      _ref = this.models;
-      _results = [];
-      for (key in _ref) {
-        value = _ref[key];
-        _results.push(callback(value));
-      }
-      return _results;
-    };
-
-    return Store;
-
-  })(Module);
 
 }).call(this);
 }, "wingman/request": function(exports, require, module) {(function() {
@@ -1373,6 +1182,253 @@
   })(Module);
 
   module.exports = WingmanObject;
+
+}).call(this);
+}, "wingman/store": function(exports, require, module) {(function() {
+  var Collection, Store;
+
+  Collection = require('./store/collection');
+
+  module.exports = Store = (function() {
+
+    function Store(options) {
+      var _ref;
+      this.options = options;
+      this.collections = {};
+      this.collectionClass = ((_ref = this.options) != null ? _ref.collectionClass : void 0) || Collection;
+    }
+
+    Store.prototype.collection = function(klass) {
+      return this.collections[klass] || this.createCollection(klass);
+    };
+
+    Store.prototype.createCollection = function(klass) {
+      return this.collections[klass] = new this.collectionClass(klass);
+    };
+
+    Store.prototype.clear = function() {
+      var collection, klass, _ref, _results;
+      _ref = this.collections;
+      _results = [];
+      for (klass in _ref) {
+        collection = _ref[klass];
+        _results.push(collection.clear());
+      }
+      return _results;
+    };
+
+    return Store;
+
+  })();
+
+}).call(this);
+}, "wingman/store/collection": function(exports, require, module) {(function() {
+  var Events, Module, Scope, Store,
+    __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
+    __hasProp = Object.prototype.hasOwnProperty,
+    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor; child.__super__ = parent.prototype; return child; };
+
+  Module = require('./../shared/module');
+
+  Events = require('./../shared/events');
+
+  Scope = require('./scope');
+
+  module.exports = Store = (function(_super) {
+
+    __extends(Store, _super);
+
+    Store.include(Events);
+
+    function Store() {
+      this.remove = __bind(this.remove, this);      this.models = {};
+    }
+
+    Store.prototype.add = function(model) {
+      if (!model.get('id')) throw new Error('Model must have ID to be stored.');
+      if (this.exists(model)) {
+        return this.update(this.models[model.get('id')], model);
+      } else {
+        return this.insert(model);
+      }
+    };
+
+    Store.prototype.insert = function(model) {
+      this.models[model.get('id')] = model;
+      this.trigger('add', model);
+      return model.bind('destroy', this.remove);
+    };
+
+    Store.prototype.update = function(model, model2) {
+      var key, value, _ref, _results;
+      _ref = model2.toJSON();
+      _results = [];
+      for (key in _ref) {
+        value = _ref[key];
+        if (key !== 'id') {
+          _results.push(model.setProperty(key, value));
+        } else {
+          _results.push(void 0);
+        }
+      }
+      return _results;
+    };
+
+    Store.prototype.find = function(id) {
+      return this.models[id];
+    };
+
+    Store.prototype.count = function() {
+      return Object.keys(this.models).length;
+    };
+
+    Store.prototype.remove = function(model) {
+      delete this.models[model.get('id')];
+      model.unbind(this.remove);
+      return this.trigger('remove', model);
+    };
+
+    Store.prototype.exists = function(model) {
+      return !!this.models[model.get('id')];
+    };
+
+    Store.prototype.forEach = function(callback) {
+      var key, value, _ref, _results;
+      _ref = this.models;
+      _results = [];
+      for (key in _ref) {
+        value = _ref[key];
+        _results.push(callback(value));
+      }
+      return _results;
+    };
+
+    Store.prototype.scoped = function(params) {
+      return new Scope(this, params);
+    };
+
+    Store.prototype.clear = function() {
+      return this.forEach(function(model) {
+        return model.destroy();
+      });
+    };
+
+    return Store;
+
+  })(Module);
+
+}).call(this);
+}, "wingman/store/scope": function(exports, require, module) {(function() {
+  var Events, Module, Scope,
+    __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
+    __hasProp = Object.prototype.hasOwnProperty,
+    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor; child.__super__ = parent.prototype; return child; };
+
+  Module = require('./../shared/module');
+
+  Events = require('./../shared/events');
+
+  module.exports = Scope = (function(_super) {
+
+    __extends(Scope, _super);
+
+    Scope.include(Events);
+
+    function Scope(collection, params) {
+      var _this = this;
+      this.params = params;
+      this.remove = __bind(this.remove, this);
+      this.check = __bind(this.check, this);
+      this.listen = __bind(this.listen, this);
+      this.models = {};
+      collection.forEach(function(model) {
+        return _this.check(model);
+      });
+      collection.bind('add', this.listen);
+    }
+
+    Scope.prototype.listen = function(model) {
+      var key, _i, _len, _ref, _results,
+        _this = this;
+      this.check(model);
+      _ref = Object.keys(this.params);
+      _results = [];
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        key = _ref[_i];
+        _results.push(model.observe(key, function() {
+          return _this.check(model);
+        }));
+      }
+      return _results;
+    };
+
+    Scope.prototype.check = function(model) {
+      if (this.shouldBeAdded(model)) {
+        return this.add(model);
+      } else if (this.shouldBeRemoved(model)) {
+        return this.remove(model);
+      }
+    };
+
+    Scope.prototype.shouldBeAdded = function(model) {
+      return this.matches(model) && !this.exists(model);
+    };
+
+    Scope.prototype.shouldBeRemoved = function(model) {
+      return !this.matches(model) && this.exists(model);
+    };
+
+    Scope.prototype.add = function(model) {
+      if (!model.get('id')) throw new Error('Model must have ID to be stored.');
+      if (this.exists(model)) {
+        throw new Error("" + model.constructor.name + " model with ID " + (model.get('id')) + " already in scope.");
+      }
+      this.models[model.get('id')] = model;
+      this.trigger('add', model);
+      return model.bind('destroy', this.remove);
+    };
+
+    Scope.prototype.matches = function(model) {
+      var _this = this;
+      return Object.keys(this.params).every(function(key) {
+        return model.get(key) === _this.params[key];
+      });
+    };
+
+    Scope.prototype.count = function() {
+      return Object.keys(this.models).length;
+    };
+
+    Scope.prototype.find = function(id) {
+      return this.models[id] || (function() {
+        throw new Error('Model not found in scope.');
+      })();
+    };
+
+    Scope.prototype.remove = function(model) {
+      delete this.models[model.get('id')];
+      model.unbind('destroy', this.remove);
+      return this.trigger('remove', model);
+    };
+
+    Scope.prototype.exists = function(model) {
+      return !!this.models[model.get('id')];
+    };
+
+    Scope.prototype.forEach = function(callback) {
+      var key, value, _ref, _results;
+      _ref = this.models;
+      _results = [];
+      for (key in _ref) {
+        value = _ref[key];
+        _results.push(callback(value));
+      }
+      return _results;
+    };
+
+    return Scope;
+
+  })(Module);
 
 }).call(this);
 }, "wingman/template": function(exports, require, module) {(function() {
