@@ -383,7 +383,12 @@
 
     Model.prototype.destroy = function() {
       this.trigger('destroy', this);
-      return this.storageAdapter["delete"](this.get('id'));
+      this.storageAdapter["delete"](this.get('id'));
+      return this.flush();
+    };
+
+    Model.prototype.flush = function() {
+      return this.trigger('flush', this);
     };
 
     Model.prototype.toParam = function() {
@@ -1159,6 +1164,10 @@
       return typeof value === 'object' && ((value != null ? value.constructor : void 0) != null) && value.constructor.name === 'Object' && (!(value instanceof WingmanObject)) && !((value != null ? value._ownerDocument : void 0) != null);
     };
 
+    WingmanObject.prototype.createSubContext = function() {
+      return Object.create(this);
+    };
+
     WingmanObject.prototype.addTriggersToArray = function(propertyName) {
       var array, parent;
       parent = this;
@@ -1206,13 +1215,13 @@
       return this.collections[klass] = new this.collectionClass(klass);
     };
 
-    Store.prototype.clear = function() {
+    Store.prototype.flush = function() {
       var collection, klass, _ref, _results;
       _ref = this.collections;
       _results = [];
       for (klass in _ref) {
         collection = _ref[klass];
-        _results.push(collection.clear());
+        _results.push(collection.flush());
       }
       return _results;
     };
@@ -1256,7 +1265,7 @@
     Store.prototype.insert = function(model) {
       this.models[model.get('id')] = model;
       this.trigger('add', model);
-      return model.bind('destroy', this.remove);
+      return model.bind('flush', this.remove);
     };
 
     Store.prototype.update = function(model, model2) {
@@ -1307,9 +1316,9 @@
       return new Scope(this, params);
     };
 
-    Store.prototype.clear = function() {
+    Store.prototype.flush = function() {
       return this.forEach(function(model) {
-        return model.destroy();
+        return model.flush();
       });
     };
 
@@ -1790,7 +1799,7 @@
     ForBlockHandler.prototype.add = function(value) {
       var child, hash, key, newContext, _i, _len, _ref, _results;
       this.handlers[value] = [];
-      newContext = Object.create(this.context);
+      newContext = this.context.createSubContext();
       key = Fleck.singularize(this.options.source.split('.').pop());
       hash = {};
       hash[key] = value;
@@ -2148,7 +2157,7 @@
 
 }).call(this);
 }, "wingman/view": function(exports, require, module) {(function() {
-  var Elementary, Fleck, STYLE_NAMES, Wingman, WingmanObject,
+  var Elementary, Fleck, STYLE_NAMES, View, Wingman, WingmanObject,
     __hasProp = Object.prototype.hasOwnProperty,
     __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor; child.__super__ = parent.prototype; return child; },
     __indexOf = Array.prototype.indexOf || function(item) { for (var i = 0, l = this.length; i < l; i++) { if (i in this && this[i] === item) return i; } return -1; };
@@ -2163,13 +2172,13 @@
 
   STYLE_NAMES = ['backgroundImage', 'backgroundColor', 'backgroundPosition', 'left', 'right', 'top', 'bottom', 'width', 'height'];
 
-  module.exports = (function(_super) {
+  module.exports = View = (function(_super) {
 
-    __extends(_Class, _super);
+    __extends(View, _super);
 
-    _Class.include(Elementary);
+    View.include(Elementary);
 
-    _Class.parseEvents = function(eventsHash) {
+    View.parseEvents = function(eventsHash) {
       var key, trigger, _results;
       _results = [];
       for (key in eventsHash) {
@@ -2179,7 +2188,7 @@
       return _results;
     };
 
-    _Class.parseEvent = function(key, trigger) {
+    View.parseEvent = function(key, trigger) {
       var type;
       type = key.split(' ')[0];
       return {
@@ -2189,7 +2198,7 @@
       };
     };
 
-    function _Class(options) {
+    function View(options) {
       if ((options != null ? options.parent : void 0) != null) {
         this.set({
           parent: options.parent
@@ -2209,17 +2218,17 @@
       this.set({
         children: []
       });
-      _Class.__super__.constructor.call(this);
+      View.__super__.constructor.call(this);
       if (options != null ? options.render : void 0) this.render();
     }
 
-    _Class.prototype.name = function() {
+    View.prototype.name = function() {
       var withoutView;
       withoutView = this.constructor.name.replace(/View$/, '');
       return Fleck.camelize(Fleck.underscore(withoutView));
     };
 
-    _Class.prototype.render = function() {
+    View.prototype.render = function() {
       var template, templateSource;
       templateSource = this.get('templateSource');
       if (templateSource) {
@@ -2232,11 +2241,11 @@
       return typeof this.ready === "function" ? this.ready() : void 0;
     };
 
-    _Class.prototype.childClasses = function() {
+    View.prototype.childClasses = function() {
       return this.constructor;
     };
 
-    _Class.prototype.createChild = function(name, options) {
+    View.prototype.createChild = function(name, options) {
       var child, className, klass,
         _this = this;
       className = Fleck.camelize(Fleck.underscore(name), true) + 'View';
@@ -2260,7 +2269,7 @@
       return child;
     };
 
-    _Class.prototype.templateSource = function() {
+    View.prototype.templateSource = function() {
       var name, templateSource;
       name = this.get('templateName');
       templateSource = this.constructor.templateSources[name];
@@ -2268,11 +2277,11 @@
       return templateSource;
     };
 
-    _Class.prototype.templateName = function() {
+    View.prototype.templateName = function() {
       return this.path();
     };
 
-    _Class.prototype.setupListeners = function() {
+    View.prototype.setupListeners = function() {
       var _this = this;
       this.el.addEventListener('click', function(e) {
         if (_this.click) return _this.click(e);
@@ -2280,7 +2289,7 @@
       if (this.events) return this.setupEvents();
     };
 
-    _Class.prototype.setupEvents = function() {
+    View.prototype.setupEvents = function() {
       var event, _i, _len, _ref, _results;
       _ref = this.constructor.parseEvents(this.events);
       _results = [];
@@ -2291,7 +2300,7 @@
       return _results;
     };
 
-    _Class.prototype.triggerWithCustomArguments = function(trigger) {
+    View.prototype.triggerWithCustomArguments = function(trigger) {
       var args, argumentsMethodName, customArguments;
       args = [trigger];
       argumentsMethodName = Fleck.camelize(trigger) + "Arguments";
@@ -2300,7 +2309,7 @@
       return this.trigger.apply(this, args);
     };
 
-    _Class.prototype.setupEvent = function(event) {
+    View.prototype.setupEvent = function(event) {
       var _this = this;
       return this.el.addEventListener(event.type, function(e) {
         var current, elm, match, _i, _len, _ref, _results;
@@ -2324,15 +2333,15 @@
       });
     };
 
-    _Class.prototype.pathName = function() {
+    View.prototype.pathName = function() {
       return Fleck.underscore(this.constructor.name.replace(/([A-Z])/g, ' $1').substring(1).split(' ').slice(0, -1).join(''));
     };
 
-    _Class.prototype.append = function(view) {
+    View.prototype.append = function(view) {
       return this.el.appendChild(view.el);
     };
 
-    _Class.prototype.pathKeys = function() {
+    View.prototype.pathKeys = function() {
       var pathKeys, _ref;
       if (this.isRoot()) return [];
       pathKeys = [this.pathName()];
@@ -2342,11 +2351,11 @@
       return pathKeys;
     };
 
-    _Class.prototype.isRoot = function() {
+    View.prototype.isRoot = function() {
       return this.get('parent') instanceof Wingman.Application;
     };
 
-    _Class.prototype.path = function() {
+    View.prototype.path = function() {
       if (this.get('parent') instanceof Wingman.Application) {
         return 'root';
       } else {
@@ -2354,12 +2363,12 @@
       }
     };
 
-    _Class.prototype.remove = function() {
+    View.prototype.remove = function() {
       if (this.el.parentNode) Elementary.remove.call(this);
       return this.trigger('remove');
     };
 
-    _Class.prototype.setupStyles = function() {
+    View.prototype.setupStyles = function() {
       var name, property, _results;
       _results = [];
       for (name in this) {
@@ -2373,7 +2382,7 @@
       return _results;
     };
 
-    _Class.prototype.setupStyle = function(name) {
+    View.prototype.setupStyle = function(name) {
       var _this = this;
       this.setStyle(name, this.get(name));
       return this.observe(name, function(newValue) {
@@ -2381,7 +2390,17 @@
       });
     };
 
-    return _Class;
+    View.prototype.createSubContext = function() {
+      var context,
+        _this = this;
+      context = View.__super__.createSubContext.call(this);
+      context.bind('descendantCreated', function(child) {
+        return _this.trigger('descendantCreated', child);
+      });
+      return context;
+    };
+
+    return View;
 
   })(WingmanObject);
 
