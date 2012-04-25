@@ -58,6 +58,8 @@
     exports.localStorage = localStorage;
   }
 
+  exports.Object = require('./wingman/shared/object');
+
   exports.request = require('./wingman/request');
 
   exports.Template = require('./wingman/template');
@@ -82,7 +84,7 @@
 
 }).call(this);
 }, "wingman/application": function(exports, require, module) {(function() {
-  var Application, Events, Fleck, Navigator, Wingman, WingmanObject,
+  var Application, Events, Fleck, Navigator, Wingman,
     __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
     __hasProp = Object.prototype.hasOwnProperty,
     __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor; child.__super__ = parent.prototype; return child; };
@@ -90,8 +92,6 @@
   Wingman = require('../wingman');
 
   Events = require('./shared/events');
-
-  WingmanObject = require('./shared/object');
 
   Navigator = require('./shared/navigator');
 
@@ -192,16 +192,14 @@
 
     return Application;
 
-  })(WingmanObject);
+  })(Wingman.Object);
 
 }).call(this);
 }, "wingman/controller": function(exports, require, module) {(function() {
-  var Navigator, Wingman, WingmanObject,
+  var Navigator, Wingman,
     __hasProp = Object.prototype.hasOwnProperty,
     __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor; child.__super__ = parent.prototype; return child; },
     __slice = Array.prototype.slice;
-
-  WingmanObject = require('./shared/object');
 
   Wingman = require('../wingman');
 
@@ -247,18 +245,16 @@
 
     return _Class;
 
-  })(WingmanObject);
+  })(Wingman.Object);
 
 }).call(this);
 }, "wingman/model": function(exports, require, module) {(function() {
-  var Fleck, HasManyAssociation, Model, StorageAdapter, Wingman, WingmanObject,
+  var Fleck, HasManyAssociation, Model, StorageAdapter, Wingman,
     __hasProp = Object.prototype.hasOwnProperty,
     __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor; child.__super__ = parent.prototype; return child; },
     __slice = Array.prototype.slice;
 
   Wingman = require('../wingman');
-
-  WingmanObject = require('./shared/object');
 
   StorageAdapter = require('./model/storage_adapter');
 
@@ -442,7 +438,7 @@
 
     return Model;
 
-  })(WingmanObject);
+  })(Wingman.Object);
 
 }).call(this);
 }, "wingman/model/has_many_association": function(exports, require, module) {(function() {
@@ -1232,7 +1228,7 @@
 
 }).call(this);
 }, "wingman/store/collection": function(exports, require, module) {(function() {
-  var Events, Module, Scope, Store,
+  var Collection, Events, Module, Scope,
     __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
     __hasProp = Object.prototype.hasOwnProperty,
     __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor; child.__super__ = parent.prototype; return child; };
@@ -1243,17 +1239,17 @@
 
   Scope = require('./scope');
 
-  module.exports = Store = (function(_super) {
+  module.exports = Collection = (function(_super) {
 
-    __extends(Store, _super);
+    __extends(Collection, _super);
 
-    Store.include(Events);
+    Collection.include(Events);
 
-    function Store() {
+    function Collection() {
       this.remove = __bind(this.remove, this);      this.models = {};
     }
 
-    Store.prototype.add = function(model) {
+    Collection.prototype.add = function(model) {
       if (!model.get('id')) throw new Error('Model must have ID to be stored.');
       if (this.exists(model)) {
         return this.update(this.models[model.get('id')], model);
@@ -1262,13 +1258,13 @@
       }
     };
 
-    Store.prototype.insert = function(model) {
+    Collection.prototype.insert = function(model) {
       this.models[model.get('id')] = model;
       this.trigger('add', model);
       return model.bind('flush', this.remove);
     };
 
-    Store.prototype.update = function(model, model2) {
+    Collection.prototype.update = function(model, model2) {
       var key, value, _ref, _results;
       _ref = model2.toJSON();
       _results = [];
@@ -1283,25 +1279,25 @@
       return _results;
     };
 
-    Store.prototype.find = function(id) {
+    Collection.prototype.find = function(id) {
       return this.models[id];
     };
 
-    Store.prototype.count = function() {
+    Collection.prototype.count = function() {
       return Object.keys(this.models).length;
     };
 
-    Store.prototype.remove = function(model) {
+    Collection.prototype.remove = function(model) {
       delete this.models[model.get('id')];
       model.unbind(this.remove);
       return this.trigger('remove', model);
     };
 
-    Store.prototype.exists = function(model) {
+    Collection.prototype.exists = function(model) {
       return !!this.models[model.get('id')];
     };
 
-    Store.prototype.forEach = function(callback) {
+    Collection.prototype.forEach = function(callback) {
       var key, value, _ref, _results;
       _ref = this.models;
       _results = [];
@@ -1312,17 +1308,17 @@
       return _results;
     };
 
-    Store.prototype.scoped = function(params) {
+    Collection.prototype.scoped = function(params) {
       return new Scope(this, params);
     };
 
-    Store.prototype.flush = function() {
+    Collection.prototype.flush = function() {
       return this.forEach(function(model) {
         return model.flush();
       });
     };
 
-    return Store;
+    return Collection;
 
   })(Module);
 
@@ -2157,14 +2153,12 @@
 
 }).call(this);
 }, "wingman/view": function(exports, require, module) {(function() {
-  var Elementary, Fleck, STYLE_NAMES, View, Wingman, WingmanObject,
+  var Elementary, Fleck, STYLE_NAMES, View, Wingman,
     __hasProp = Object.prototype.hasOwnProperty,
     __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor; child.__super__ = parent.prototype; return child; },
     __indexOf = Array.prototype.indexOf || function(item) { for (var i = 0, l = this.length; i < l; i++) { if (i in this && this[i] === item) return i; } return -1; };
 
   Wingman = require('../wingman');
-
-  WingmanObject = require('./shared/object');
 
   Elementary = require('./shared/elementary');
 
@@ -2402,7 +2396,7 @@
 
     return View;
 
-  })(WingmanObject);
+  })(Wingman.Object);
 
 }).call(this);
 }, "strscan": function(exports, require, module) {(function() {
